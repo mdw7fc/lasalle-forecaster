@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/farm_water_balance_dashboard.html" }
+  ]
+}
