@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaSalle Farm Water Balance Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
+<style>
+:root {
+    --bg:#f5f6f8; --card:#fff; --hdr:#1a3a2a; --txt:#1a1a1a; --txt2:#5a6570;
+    --accent:#2e7d32; --corn:#E8A317; --soy:#4CAF50; --wheat:#8D6E63;
+    --fc:#1565C0; --obs:#D32F2F; --env:#90A4AE; --gap:14px; --r:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);line-height:1.4}
+.wrap{max-width:1440px;margin:0 auto;padding:var(--gap)}
+header{background:var(--hdr);color:#fff;padding:18px 24px;border-radius:var(--r);margin-bottom:var(--gap);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+header h1{font-size:20px;font-weight:600}
+header .sub{font-size:12px;color:rgba(255,255,255,.75)}
+.ctrls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.ctrls label{font-size:11px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px}
+.ctrls select{padding:5px 8px;border:1px solid rgba(255,255,255,.2);border-radius:4px;background:rgba(255,255,255,.1);color:#fff;font-size:13px}
+.ctrls select option{background:#1a3a2a;color:#fff}
+.tabs{display:flex;gap:2px;margin-bottom:var(--gap);background:var(--card);border-radius:var(--r);padding:4px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.tab-btn{padding:10px 20px;border:none;background:transparent;font-size:13px;font-weight:500;color:var(--txt2);cursor:pointer;border-radius:6px;transition:all .15s}
+.tab-btn:hover{background:#f0f0f0;color:var(--txt)}
+.tab-btn.on{background:var(--hdr);color:#fff}
+.panel{display:none}.panel.on{display:block}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--gap);margin-bottom:var(--gap)}
+.kpi{background:var(--card);border-radius:var(--r);padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.kpi .l{font-size:11px;color:var(--txt2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.kpi .v{font-size:24px;font-weight:700}
+.kpi .s{font-size:11px;color:var(--txt2);margin-top:2px}
+.warm{color:#C62828}.cool{color:#1565C0}.wet{color:#2E7D32}.dry{color:#BF360C}
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);margin-bottom:var(--gap)}
+.cb{background:var(--card);border-radius:var(--r);padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.cb.full{grid-column:1/-1}.cb h3{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.cb h3 .h{font-size:10px;color:var(--txt2);font-weight:400}
+.cb canvas{max-height:320px}.cb.tall canvas{max-height:400px}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.tbl th{text-align:center;padding:8px 6px;border-bottom:2px solid #dee2e6;color:var(--txt2);font-size:11px;text-transform:uppercase}
+.tbl td{text-align:center;padding:8px 6px;border-bottom:1px solid #f0f0f0}
+.tbl tr:hover td{background:#f8f9fa}
+.pleg{display:flex;gap:16px;flex-wrap:wrap;margin:6px 0;font-size:11px;color:var(--txt2)}
+.pleg span{display:flex;align-items:center;gap:4px}
+.pleg .sw{display:inline-block;width:24px;height:3px;border-radius:1px}
+.pleg .band{height:10px;opacity:.3}
+footer{text-align:center;font-size:11px;color:var(--txt2);padding:12px}
+#loading{text-align:center;padding:80px 20px;font-size:16px;color:var(--txt2)}
+#error-msg{text-align:center;padding:60px 20px;color:#C62828;display:none}
+#error-msg h2{margin-bottom:8px}
+.skill-good{color:#2E7D32}.skill-ok{color:#E65100}.skill-poor{color:#C62828}
+
+@media(max-width:900px){
+    .cg{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    header{flex-direction:column;align-items:flex-start}
+    .tabs{overflow-x:auto;flex-wrap:nowrap}
+    .tab-btn{white-space:nowrap;padding:10px 14px;font-size:12px}
+    .cb{padding:12px 14px}
+    .cb canvas{max-height:260px}
+    .cb.tall canvas{max-height:300px}
+}
+@media(max-width:500px){
+    .kpis{grid-template-columns:1fr}
+    .kpi .v{font-size:20px}
+}
+
+@media print {
+    body{background:#fff;font-size:10px}
+    .wrap{max-width:100%;padding:0}
+    header{background:#1a3a2a;-webkit-print-color-adjust:exact;print-color-adjust:exact;border-radius:0;margin-bottom:8px;padding:12px}
+    .tabs,.ctrls{display:none!important}
+    .panel{display:block!important;page-break-inside:avoid}
+    .cg{grid-template-columns:1fr;gap:8px}
+    .cb{box-shadow:none;border:1px solid #ddd;page-break-inside:avoid;padding:10px}
+    .cb canvas{max-height:250px!important}
+    .kpis{grid-template-columns:repeat(3,1fr);gap:6px}
+    footer{font-size:9px}
+    #loading,#error-msg{display:none!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div><h1>LaSalle Farm Water Balance</h1>
+<div class="sub" id="hdr-sub">Loading data...</div></div>
+<div class="ctrls">
+<div><label>Crop</label><br><select id="sel-crop" onchange="refresh()">
+<option value="corn">Corn</option><option value="soybean">Soybean</option><option value="wheat">Winter Wheat</option></select></div>
+<div><label>Compare</label><br><select id="sel-cmp" onchange="refresh()"><option value="none">None</option></select></div>
+</div>
+</header>
+
+<div id="loading">Loading dashboard data...</div>
+<div id="error-msg"><h2>Could not load dashboard data</h2><p>Run <code>python update_dashboard.py</code> to generate data, then reload this page.</p></div>
+
+<div id="main-content" style="display:none">
+<nav class="tabs">
+<button class="tab-btn on" onclick="showTab('wb',this)">Water Balance</button>
+<button class="tab-btn" onclick="showTab('wx',this)">Weather Forecast</button>
+<button class="tab-btn" onclick="showTab('sw',this)">Soil Water</button>
+</nav>
+
+<!-- WATER BALANCE TAB -->
+<div id="p-wb" class="panel on">
+<section class="kpis" id="wb-kpis"></section>
+<section class="cg">
+<div class="cb full tall"><h3>Cumulative Crop Water Deficit (Eff. Precip minus Crop ET)<span class="h">More negative = more irrigation needed</span></h3><canvas id="c-def"></canvas></div>
+<div class="cb"><h3>Cumulative Reference ET0<span class="h">inches</span></h3><canvas id="c-et0"></canvas></div>
+<div class="cb"><h3>Cumulative Precipitation<span class="h">inches</span></h3><canvas id="c-prcp"></canvas></div>
+<div class="cb full"><h3>Forecast Skill Tracker<span class="h">Prediction snapshots vs actuals</span></h3>
+<table class="tbl"><thead><tr><th>Snapshot</th><th>Fcst Deficit</th><th>Actual Deficit</th><th>Bias</th><th>MAE</th><th>Rating</th></tr></thead><tbody id="snap-body"></tbody></table>
+<div style="margin-top:10px"><canvas id="c-skill" style="max-height:200px"></canvas></div></div>
+<div class="cb full"><h3>Historical Season Water Budget<span class="h">Stacked: eff. precip + irrigation need = crop ET</span></h3><canvas id="c-hist"></canvas></div>
+</section>
+</div>
+
+<!-- WEATHER FORECAST TAB -->
+<div id="p-wx" class="panel">
+<section class="kpis" id="wx-kpis"></section>
+<section class="cg">
+<div class="cb full tall"><h3>Daily High Temperature: Forecast vs Normals<span class="h">Shaded = ensemble spread</span></h3>
+<div class="pleg"><span><span class="sw" style="background:#1565C0"></span>Forecast mean</span><span><span class="sw band" style="background:#1565C0"></span>P25-P75</span><span><span class="sw band" style="background:#90CAF9"></span>P10-P90</span><span><span class="sw" style="background:#888;border-top:2px dashed #888;height:0"></span>Hist median</span><span><span class="sw band" style="background:#9E9E9E"></span>Hist P25-P75</span><span><span class="sw" style="background:#D32F2F"></span>Observed</span></div>
+<canvas id="c-tmax"></canvas></div>
+<div class="cb full tall"><h3>Daily Low Temperature: Forecast vs Normals<span class="h">SEAS5 Tmin has known warm bias (+2-5F)</span></h3><canvas id="c-tmin"></canvas></div>
+<div class="cb full tall"><h3>Cumulative Precipitation: Forecast vs Normals<span class="h">Wide spread = high precip uncertainty</span></h3><canvas id="c-wxp"></canvas></div>
+<div class="cb full"><h3>Monthly Summary<span class="h">Ensemble mean anomalies</span></h3>
+<table class="tbl"><thead><tr><th>Month</th><th>Fcst High</th><th>Normal</th><th>Anom</th><th>Fcst Low</th><th>Normal</th><th>Anom</th><th>Fcst Precip</th><th>Normal</th><th>Anom</th></tr></thead><tbody id="wx-tbody"></tbody></table></div>
+</section>
+</div>
+
+<!-- SOIL WATER TAB -->
+<div id="p-sw" class="panel">
+<section class="kpis" id="sw-kpis"></section>
+<section class="cg">
+<div class="cb full tall"><h3>Soil Water Content<span class="h">Available water in root zone (inches) | AWC = capacity</span></h3><canvas id="c-sw"></canvas></div>
+<div class="cb full"><h3>Crop Growth Stage (GDD Accumulation)<span class="h">Growing degree days from planting</span></h3><canvas id="c-gdd"></canvas></div>
+</section>
+</div>
+
+<footer id="ft"></footer>
+</div><!-- main-content -->
+</div><!-- wrap -->
+
+<script>
+const CL = {corn:'#E8A317',soybean:'#4CAF50',wheat:'#8D6E63'};
+const CN = {corn:'Corn',soybean:'Soybean',wheat:'Winter Wheat'};
+const MM = [{d:91,l:'Apr'},{d:121,l:'May'},{d:152,l:'Jun'},{d:182,l:'Jul'},{d:213,l:'Aug'},{d:244,l:'Sep'},{d:274,l:'Oct'}];
+var CH = {};
+var D = null;
+
+// Legend filter: hide datasets starting with underscore
+const legendFilter = (item) => !item.text.startsWith('_');
+
+function showTab(id, btn) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('on'));
+    document.getElementById('p-'+id).classList.add('on');
+    btn.classList.add('on');
+    if (id === 'wx' && !CH.tmax) { buildWx(); refreshWx(); }
+    if (id === 'sw' && !CH.sw) { buildSW(); refreshSW(); }
+}
+
+function xScale() {
+    return {type:'linear',min:91,max:304,
+        ticks:{callback:v=>{const m=MM.find(t=>t.d===v);return m?m.l:''},values:MM.map(m=>m.d),font:{size:12,weight:'bold'},maxRotation:0},
+        grid:{color:'rgba(0,0,0,.04)'}};
+}
+
+function cOpts(yLbl,sugMin,sugMax) {
+    return {responsive:true,maintainAspectRatio:false,animation:false,
+        plugins:{legend:{position:'top',labels:{usePointStyle:true,padding:12,font:{size:11},filter:legendFilter}},tooltip:{mode:'index',intersect:false}},
+        scales:{x:xScale(),y:{title:{display:true,text:yLbl},suggestedMin:sugMin,suggestedMax:sugMax,grid:{color:'rgba(0,0,0,.04)'}}}};
+}
+
+function envDS(field) {
+    const e=D.historical_envelope, d=e[field];
+    if (!d) return [];
+    const doys=e.doys;
+    return [
+        {label:'Hist Min-Max',data:doys.map((x,i)=>({x,y:d.max[i]})),borderColor:'transparent',backgroundColor:'rgba(144,164,174,.1)',fill:'+1',pointRadius:0,order:15},
+        {label:'_hmax',data:doys.map((x,i)=>({x,y:d.min[i]})),borderColor:'transparent',backgroundColor:'transparent',fill:false,pointRadius:0,order:15},
+        {label:'Hist P25-P75',data:doys.map((x,i)=>({x,y:d.p75[i]})),borderColor:'transparent',backgroundColor:'rgba(144,164,174,.2)',fill:'+1',pointRadius:0,order:12},
+        {label:'_hp25',data:doys.map((x,i)=>({x,y:d.p25[i]})),borderColor:'transparent',backgroundColor:'rgba(144,164,174,.2)',fill:false,pointRadius:0,order:12},
+        {label:'Hist Median',data:doys.map((x,i)=>({x,y:d.median[i]})),borderColor:'#90A4AE',borderWidth:1.5,borderDash:[6,3],fill:false,pointRadius:0,order:10},
+    ];
+}
+
+function fcDS(field,color) {
+    const f=D.current_forecast, d=f[field];
+    if (!d) return [];
+    const doys=f.doys;
+    return [
+        {label:'Fcst P10-P90',data:doys.map((x,i)=>({x,y:d.p90[i]})),borderColor:'transparent',backgroundColor:color+'1A',fill:'+1',pointRadius:0,order:7},
+        {label:'_fout',data:doys.map((x,i)=>({x,y:d.p10[i]})),borderColor:'transparent',backgroundColor:color+'1A',fill:false,pointRadius:0,order:7},
+        {label:'Forecast mean',data:doys.map((x,i)=>({x,y:d.mean[i]})),borderColor:color,borderWidth:2.5,fill:false,pointRadius:0,order:3},
+    ];
+}
+
+function obsDS(field,color) {
+    const o=D.observed_2026;
+    if(!o||!o.doy||!o.doy.length) return [];
+    const vals=o[field]; if(!vals||!vals.length)return[];
+    return [{label:'2026 Observed',data:o.doy.map((x,i)=>({x,y:vals[i]})),borderColor:color,borderWidth:3,fill:false,pointRadius:2,pointBackgroundColor:color,order:1}];
+}
+
+function cmpDS(field,crop) {
+    const sel=document.getElementById('sel-cmp').value;
+    if(sel==='none') return [];
+
+    if(sel==='median30'||sel==='median10') {
+        const cutoff = sel==='median30' ? 1991 : D.metadata.years.slice(-10)[0];
+        const yrs = D.metadata.years.filter(y => y >= cutoff);
+        const label = sel==='median30' ? '30-yr Median' : '10-yr Median';
+        const doyMap = {};
+        yrs.forEach(yr => {
+            const yd = D.historical_years[String(yr)];
+            if(!yd) return;
+            yd.doy.forEach((d,i) => {
+                let val;
+                if(field.includes('deficit')||field.includes('soil_water')) val=yd[field.replace(crop+'_','')+'_cum']?undefined:undefined;
+                // Get the right value
+                if(field==='et0_cum'||field==='precip_cum'||field==='deficit_cum') val=yd[field][i];
+                else if(field.includes(crop)) {
+                    const subfield = field.replace(crop+'_','');
+                    if(yd[subfield] && yd[subfield][crop]) val=yd[subfield][crop][i];
+                    else if(yd.crop_deficit_cum && field.includes('deficit')) val=yd.crop_deficit_cum[crop][i];
+                    else if(yd.soil_water && field.includes('soil_water')) val=yd.soil_water[crop][i];
+                    else if(yd.crop_et_cum && field.includes('et_cum')) val=yd.crop_et_cum[crop][i];
+                }
+                if(val!==undefined) {
+                    if(!doyMap[d]) doyMap[d]=[];
+                    doyMap[d].push(val);
+                }
+            });
+        });
+        const doys=Object.keys(doyMap).map(Number).sort((a,b)=>a-b);
+        const medians=doys.map(d=>{const v=doyMap[d];v.sort((a,b)=>a-b);return v[Math.floor(v.length/2)]});
+        return [{label,data:doys.map((x,i)=>({x,y:medians[i]})),borderColor:'#6A1B9A',borderWidth:2,borderDash:[4,4],fill:false,pointRadius:0,order:5}];
+    }
+
+    // Individual year
+    const yd=D.historical_years[sel];
+    if(!yd) return [];
+    let vals;
+    if(field==='et0_cum'||field==='precip_cum'||field==='deficit_cum') vals=yd[field];
+    else if(field.includes('deficit')&&yd.crop_deficit_cum) vals=yd.crop_deficit_cum[crop];
+    else if(field.includes('soil_water')&&yd.soil_water) vals=yd.soil_water[crop];
+    else if(field.includes('et_cum')&&yd.crop_et_cum) vals=yd.crop_et_cum[crop];
+    if(!vals) return [];
+    return [{label:sel,data:yd.doy.map((x,i)=>({x,y:vals[i]})),borderColor:'#6A1B9A',borderWidth:2,borderDash:[4,4],fill:false,pointRadius:0,order:5}];
+}
+
+// ══════ WATER BALANCE ══════
+function buildWB() {
+    CH.def=new Chart(document.getElementById('c-def'),{type:'line',data:{datasets:[]},options:cOpts('inches',undefined,undefined)});
+    CH.et0=new Chart(document.getElementById('c-et0'),{type:'line',data:{datasets:[]},options:cOpts('inches',0,undefined)});
+    CH.prcp=new Chart(document.getElementById('c-prcp'),{type:'line',data:{datasets:[]},options:cOpts('inches',0,undefined)});
+    CH.hist=new Chart(document.getElementById('c-hist'),{type:'bar',data:{labels:[],datasets:[]},
+        options:{responsive:true,maintainAspectRatio:false,animation:false,
+            plugins:{legend:{position:'top',labels:{usePointStyle:true,padding:12,font:{size:11},filter:legendFilter}},
+                tooltip:{callbacks:{afterBody:items=>{const tot=items.reduce((s,i)=>s+i.parsed.y,0);return 'Total crop ET: '+tot.toFixed(1)+'"'}}}},
+            scales:{x:{stacked:true},y:{stacked:true,title:{display:true,text:'inches'},grid:{color:'rgba(0,0,0,.04)'}}}}});
+    // Skill chart (if data exists)
+    CH.skill=new Chart(document.getElementById('c-skill'),{type:'bar',data:{labels:[],datasets:[]},
+        options:{responsive:true,maintainAspectRatio:false,animation:false,indexAxis:'y',
+            plugins:{legend:{position:'top',labels:{font:{size:11},filter:legendFilter}}},
+            scales:{x:{title:{display:true,text:'inches'},grid:{color:'rgba(0,0,0,.04)'}},y:{grid:{display:false}}}}});
+}
+
+function refreshWB() {
+    const crop=document.getElementById('sel-crop').value;
+    const cc=CL[crop];
+    const fc=D.current_forecast, env=D.historical_envelope, obs=D.observed_2026;
+
+    if(!fc||!fc.dates||!fc.dates.length) {
+        document.getElementById('wb-kpis').innerHTML='<div class="kpi"><div class="v">No forecast data</div><div class="s">Run update_dashboard.py</div></div>';
+        return;
+    }
+
+    const li=fc.dates.length-1, ei=env.doys.length-1;
+    const fcET=fc[crop+'_et_cum'].mean[li], fcDef=fc[crop+'_deficit_cum'].mean[li];
+    const fcD10=fc[crop+'_deficit_cum'].p10[li], fcD90=fc[crop+'_deficit_cum'].p90[li];
+    const hMed=env[crop+'_deficit_cum'].median[ei];
+
+    // YTD actual vs forecast comparison
+    let ytdHtml = '';
+    if(obs&&obs.doy&&obs.doy.length>0&&obs.crop_deficit_cum&&obs.crop_deficit_cum[crop]) {
+        const lastObsDoy = obs.doy[obs.doy.length-1];
+        const obsDefNow = obs.crop_deficit_cum[crop][obs.doy.length-1];
+        // Find forecast value at same DOY
+        const fcIdx = fc.doys.indexOf(lastObsDoy);
+        if(fcIdx>=0) {
+            const fcDefAtDoy = fc[crop+'_deficit_cum'].mean[fcIdx];
+            const diff = obsDefNow - fcDefAtDoy;
+            ytdHtml = `<div class="kpi"><div class="l">YTD Actual Deficit</div><div class="v">${obsDefNow.toFixed(1)}"</div><div class="s">Through ${obs.dates[obs.dates.length-1]}</div></div>`+
+                       `<div class="kpi"><div class="l">YTD Fcst vs Actual</div><div class="v ${diff>0.5?'wet':diff<-0.5?'dry':''}">${diff>0?'+':''}${diff.toFixed(1)}"</div><div class="s">${diff>0?'Wetter':'Drier'} than forecast at this point</div></div>`;
+        }
+    }
+
+    document.getElementById('wb-kpis').innerHTML=
+        `<div class="kpi"><div class="l">Season ${CN[crop]} ET</div><div class="v" style="color:${cc}">${fcET.toFixed(1)}"</div><div class="s">Ensemble mean</div></div>`+
+        `<div class="kpi"><div class="l">Season Deficit</div><div class="v">${fcDef.toFixed(1)}"</div><div class="s">Range: ${fcD10.toFixed(1)}" to ${fcD90.toFixed(1)}"</div></div>`+
+        `<div class="kpi"><div class="l">Net Irrigation Need</div><div class="v">${Math.abs(fcDef).toFixed(1)}"</div><div class="s">= |deficit|</div></div>`+
+        `<div class="kpi"><div class="l">vs Hist Median</div><div class="v ${(fcDef-hMed)>0?'wet':'dry'}">${(fcDef-hMed)>0?'+':''}${(fcDef-hMed).toFixed(1)}"</div><div class="s">${(fcDef-hMed)>0?'Less':'More'} irrigation than usual</div></div>`+
+        `<div class="kpi"><div class="l">Season ET0</div><div class="v">${fc.et0_cum.mean[li].toFixed(1)}"</div><div class="s">Hargreaves-Samani</div></div>`+
+        `<div class="kpi"><div class="l">Season Precip</div><div class="v">${fc.precip_cum.mean[li].toFixed(1)}"</div><div class="s">Gross (SCS eff. precip)</div></div>`+
+        ytdHtml;
+
+    // Deficit chart
+    const defF = crop+'_deficit_cum';
+    let ds=[...envDS(defF),...fcDS(defF,cc),...cmpDS(defF,crop)];
+    if(obs&&obs.doy&&obs.doy.length&&obs.crop_deficit_cum&&obs.crop_deficit_cum[crop])
+        ds.push({label:'2026 Observed',data:obs.doy.map((x,i)=>({x,y:obs.crop_deficit_cum[crop][i]})),borderColor:'#D32F2F',borderWidth:3,fill:false,pointRadius:2,pointBackgroundColor:'#D32F2F',order:1});
+    CH.def.data.datasets=ds; CH.def.update('none');
+
+    // ET0
+    CH.et0.data.datasets=[...envDS('et0_cum'),...fcDS('et0_cum','#1565C0'),...obsDS('et0_cum','#D32F2F'),...cmpDS('et0_cum',crop)];
+    CH.et0.update('none');
+
+    // Precip
+    CH.prcp.data.datasets=[...envDS('precip_cum'),...fcDS('precip_cum','#0277BD'),...obsDS('precip_cum','#D32F2F'),...cmpDS('precip_cum',crop)];
+    CH.prcp.update('none');
+
+    // History bar
+    const yrs=D.metadata.years.map(String);
+    const effP=yrs.map(y=>{const d=D.historical_years[y];if(!d)return 0;const cet=d.crop_et_cum[crop].slice(-1)[0]||0;const def=Math.abs(d.crop_deficit_cum[crop].slice(-1)[0]||0);return Math.max(cet-def,0)});
+    const irrig=yrs.map(y=>{const d=D.historical_years[y];return d?Math.abs(d.crop_deficit_cum[crop].slice(-1)[0]||0):0});
+    CH.hist.data.labels=yrs;
+    CH.hist.data.datasets=[
+        {label:'Eff. Precipitation',data:effP,backgroundColor:'#42A5F5CC',borderColor:'#1E88E5',borderWidth:1,borderRadius:2},
+        {label:'Net Irrigation Need',data:irrig,backgroundColor:'#EF5350CC',borderColor:'#C62828',borderWidth:1,borderRadius:{topLeft:2,topRight:2}},
+    ];
+    CH.hist.update('none');
+
+    // Forecast skill table and chart
+    const skills = D.forecast_skill || [];
+    let shtml='';
+    const skillLabels=[], skillBias=[], skillMAE=[];
+    skills.forEach(sk => {
+        const cs = sk.crops[crop];
+        if(!cs) return;
+        const rating = Math.abs(cs.deficit_bias) < 1 ? 'Good' : Math.abs(cs.deficit_bias) < 3 ? 'Fair' : 'Poor';
+        const rc = Math.abs(cs.deficit_bias) < 1 ? 'skill-good' : Math.abs(cs.deficit_bias) < 3 ? 'skill-ok' : 'skill-poor';
+        shtml+=`<tr><td>${sk.date}</td><td>${cs.last_fc_def.toFixed(1)}"</td><td>${cs.last_obs_def.toFixed(1)}"</td>`+
+               `<td>${cs.deficit_bias>0?'+':''}${cs.deficit_bias.toFixed(2)}"</td><td>${cs.deficit_mae.toFixed(2)}"</td>`+
+               `<td class="${rc}">${rating} (${cs.n_days}d)</td></tr>`;
+        skillLabels.push(sk.date);
+        skillBias.push(cs.deficit_bias);
+        skillMAE.push(cs.deficit_mae);
+    });
+    if(!shtml) shtml='<tr><td colspan="6" style="color:var(--txt2)">No forecast snapshots yet — skill metrics will appear after the first update</td></tr>';
+    document.getElementById('snap-body').innerHTML=shtml;
+
+    if(skillLabels.length) {
+        CH.skill.data.labels=skillLabels;
+        CH.skill.data.datasets=[
+            {label:'Bias',data:skillBias,backgroundColor:'#1565C088'},
+            {label:'MAE',data:skillMAE,backgroundColor:'#E6510088'},
+        ];
+    }
+    CH.skill.update('none');
+}
+
+// ══════ WEATHER FORECAST ══════
+function buildWx() {
+    CH.tmax=new Chart(document.getElementById('c-tmax'),{type:'line',data:{datasets:[]},options:cOpts('Temperature (F)',40,100)});
+    CH.tmin=new Chart(document.getElementById('c-tmin'),{type:'line',data:{datasets:[]},options:cOpts('Temperature (F)',20,75)});
+    CH.wxp=new Chart(document.getElementById('c-wxp'),{type:'line',data:{datasets:[]},options:cOpts('Cumulative Precip (in)',0,null)});
+}
+
+function wxTempDS(variable) {
+    const fc=D.wx_forecast, he=D.wx_hist_envelope||D.historical_envelope, ob=D.obs_wx;
+    if(!fc||!he||!fc[variable]||!he[variable]) return [];
+    const d=fc[variable], h=he[variable];
+    let ds=[
+        {label:'Hist P25-P75',data:he.doys.map((x,i)=>({x,y:h.p75?h.p75[i]:0})),borderColor:'transparent',backgroundColor:'rgba(158,158,158,.15)',fill:'+1',pointRadius:0,order:12},
+        {label:'_hp25',data:he.doys.map((x,i)=>({x,y:h.p25?h.p25[i]:0})),borderColor:'transparent',backgroundColor:'rgba(158,158,158,.15)',fill:false,pointRadius:0,order:12},
+        {label:'Hist median',data:he.doys.map((x,i)=>({x,y:h.median?h.median[i]:0})),borderColor:'#9E9E9E',borderWidth:1.5,borderDash:[6,3],fill:false,pointRadius:0,order:10},
+        {label:'Fcst P10-P90',data:fc.doys.map((x,i)=>({x,y:d.p90[i]})),borderColor:'transparent',backgroundColor:'rgba(21,101,192,.1)',fill:'+1',pointRadius:0,order:7},
+        {label:'_fout',data:fc.doys.map((x,i)=>({x,y:d.p10[i]})),borderColor:'transparent',backgroundColor:'rgba(21,101,192,.1)',fill:false,pointRadius:0,order:7},
+        {label:'Fcst P25-P75',data:fc.doys.map((x,i)=>({x,y:d.p75[i]})),borderColor:'transparent',backgroundColor:'rgba(21,101,192,.2)',fill:'+1',pointRadius:0,order:6},
+        {label:'_fin',data:fc.doys.map((x,i)=>({x,y:d.p25[i]})),borderColor:'transparent',backgroundColor:'rgba(21,101,192,.2)',fill:false,pointRadius:0,order:6},
+        {label:'Forecast mean',data:fc.doys.map((x,i)=>({x,y:d.mean[i]})),borderColor:'#1565C0',borderWidth:2,fill:false,pointRadius:0,order:3},
+    ];
+    if(ob&&ob.doys&&ob.doys.length&&ob[variable]) {
+        const pts=ob.doys.map((x,i)=>ob[variable][i]!=null?{x,y:ob[variable][i]}:null).filter(Boolean);
+        if(pts.length) ds.push({label:'2026 observed',data:pts,borderColor:'#D32F2F',borderWidth:2.5,fill:false,pointRadius:3,pointBackgroundColor:'#D32F2F',order:1});
+    }
+    return ds;
+}
+
+function refreshWx() {
+    if(!CH.tmax) return;
+    CH.tmax.data.datasets=wxTempDS('tmax'); CH.tmax.update('none');
+    CH.tmin.data.datasets=wxTempDS('tmin'); CH.tmin.update('none');
+
+    const fc=D.wx_forecast, env=D.historical_envelope, ob=D.obs_wx;
+    if(!fc||!fc.precip_cum) return;
+    let pds=[
+        {label:'Hist P25-P75',data:env.doys.map((x,i)=>({x,y:env.precip_cum.p75[i]})),borderColor:'transparent',backgroundColor:'rgba(158,158,158,.15)',fill:'+1',pointRadius:0,order:12},
+        {label:'_hp25',data:env.doys.map((x,i)=>({x,y:env.precip_cum.p25[i]})),borderColor:'transparent',backgroundColor:'rgba(158,158,158,.15)',fill:false,pointRadius:0,order:12},
+        {label:'Hist median',data:env.doys.map((x,i)=>({x,y:env.precip_cum.median[i]})),borderColor:'#9E9E9E',borderWidth:1.5,borderDash:[6,3],fill:false,pointRadius:0,order:10},
+        {label:'Fcst P10-P90',data:fc.doys.map((x,i)=>({x,y:fc.precip_cum.p90[i]})),borderColor:'transparent',backgroundColor:'rgba(2,119,189,.1)',fill:'+1',pointRadius:0,order:7},
+        {label:'_fpo',data:fc.doys.map((x,i)=>({x,y:fc.precip_cum.p10[i]})),borderColor:'transparent',backgroundColor:'rgba(2,119,189,.1)',fill:false,pointRadius:0,order:7},
+        {label:'Fcst P25-P75',data:fc.doys.map((x,i)=>({x,y:fc.precip_cum.p75[i]})),borderColor:'transparent',backgroundColor:'rgba(2,119,189,.2)',fill:'+1',pointRadius:0,order:6},
+        {label:'_fpi',data:fc.doys.map((x,i)=>({x,y:fc.precip_cum.p25[i]})),borderColor:'transparent',backgroundColor:'rgba(2,119,189,.2)',fill:false,pointRadius:0,order:6},
+        {label:'Forecast mean',data:fc.doys.map((x,i)=>({x,y:fc.precip_cum.mean[i]})),borderColor:'#0277BD',borderWidth:2,fill:false,pointRadius:0,order:3},
+    ];
+    if(ob&&ob.doys&&ob.doys.length&&ob.precip_cum)
+        pds.push({label:'2026 observed',data:ob.doys.map((x,i)=>({x,y:ob.precip_cum[i]})),borderColor:'#D32F2F',borderWidth:2.5,fill:false,pointRadius:3,pointBackgroundColor:'#D32F2F',order:1});
+    CH.wxp.data.datasets=pds; CH.wxp.update('none');
+
+    // Monthly table
+    let rows='';
+    (D.monthly_wx_summary||[]).forEach(m=>{
+        const tc=m.tmax_anom>1.5?'warm':m.tmax_anom<-1.5?'cool':'';
+        const lc=m.tmin_anom>2?'warm':m.tmin_anom<-2?'cool':'';
+        const pc=m.precip_anom>0.3?'wet':m.precip_anom<-0.3?'dry':'';
+        rows+=`<tr><td><b>${m.month}</b></td><td>${m.tmax_fc}</td><td>${m.tmax_norm}</td><td class="${tc}">${m.tmax_anom>0?'+':''}${m.tmax_anom}</td>`+
+              `<td>${m.tmin_fc}</td><td>${m.tmin_norm}</td><td class="${lc}">${m.tmin_anom>0?'+':''}${m.tmin_anom}</td>`+
+              `<td>${m.precip_fc}</td><td>${m.precip_norm}</td><td class="${pc}">${m.precip_anom>0?'+':''}${m.precip_anom}</td></tr>`;
+    });
+    document.getElementById('wx-tbody').innerHTML=rows;
+
+    // WX KPIs
+    if(D.monthly_wx_summary&&D.monthly_wx_summary.length) {
+        const ms=D.monthly_wx_summary;
+        const aHi=ms.reduce((s,m)=>s+m.tmax_anom,0)/ms.length;
+        const aLo=ms.reduce((s,m)=>s+m.tmin_anom,0)/ms.length;
+        const spf=fc.precip_cum.mean.slice(-1)[0];
+        const sp10=fc.precip_cum.p10.slice(-1)[0];
+        const sp90=fc.precip_cum.p90.slice(-1)[0];
+        const spn=ms.reduce((s,m)=>s+m.precip_norm,0);
+        document.getElementById('wx-kpis').innerHTML=
+            `<div class="kpi"><div class="l">Avg High Anomaly</div><div class="v ${aHi>1?'warm':aHi<-1?'cool':''}">${aHi>0?'+':''}${aHi.toFixed(1)}F</div><div class="s">vs 1991-2020 normal</div></div>`+
+            `<div class="kpi"><div class="l">Avg Low Anomaly</div><div class="v ${aLo>2?'warm':aLo<-2?'cool':''}">${aLo>0?'+':''}${aLo.toFixed(1)}F</div><div class="s">SEAS5 Tmin has warm bias</div></div>`+
+            `<div class="kpi"><div class="l">Season Precip</div><div class="v">${spf.toFixed(1)}"</div><div class="s">Range: ${sp10.toFixed(1)}" - ${sp90.toFixed(1)}"</div></div>`+
+            `<div class="kpi"><div class="l">Precip vs Normal</div><div class="v ${spf>spn?'wet':'dry'}">${(spf/spn*100).toFixed(0)}%</div><div class="s">Normal = ${spn.toFixed(1)}"</div></div>`;
+    }
+}
+
+// ══════ SOIL WATER TAB ══════
+function buildSW() {
+    CH.sw=new Chart(document.getElementById('c-sw'),{type:'line',data:{datasets:[]},options:cOpts('inches',0,8)});
+    CH.gdd=new Chart(document.getElementById('c-gdd'),{type:'line',data:{datasets:[]},
+        options:{...cOpts('GDD (cumulative)',0,undefined),
+            plugins:{legend:{position:'top',labels:{usePointStyle:true,padding:12,font:{size:11},filter:legendFilter}},
+                     tooltip:{mode:'index',intersect:false}}}});
+}
+
+function refreshSW() {
+    if(!CH.sw) return;
+    const crop=document.getElementById('sel-crop').value;
+    const cc=CL[crop];
+    const fc=D.current_forecast, env=D.historical_envelope, obs=D.observed_2026;
+    const swField = crop+'_soil_water';
+
+    let ds = [];
+    // Historical envelope for soil water
+    if(env[swField]) ds.push(...envDS(swField));
+    // Forecast soil water
+    if(fc&&fc[swField]) ds.push(...fcDS(swField,cc));
+    // Observed soil water
+    if(obs&&obs.doy&&obs.soil_water&&obs.soil_water[crop]) {
+        ds.push({label:'2026 Observed',data:obs.doy.map((x,i)=>({x,y:obs.soil_water[crop][i]})),borderColor:'#D32F2F',borderWidth:3,fill:false,pointRadius:2,pointBackgroundColor:'#D32F2F',order:1});
+    }
+    // AWC reference line
+    ds.push({label:'AWC Capacity',data:[{x:91,y:7},{x:304,y:7}],borderColor:'#455A64',borderWidth:1.5,borderDash:[8,4],fill:false,pointRadius:0,order:0});
+
+    CH.sw.data.datasets=ds; CH.sw.update('none');
+
+    // GDD chart — show all 3 crops
+    let gds=[];
+    for(const [c,col] of [['corn','#E8A317'],['soybean','#4CAF50'],['wheat','#8D6E63']]) {
+        if(obs&&obs.doy&&obs.crop_gdd&&obs.crop_gdd[c]) {
+            gds.push({label:CN[c]+' (observed)',data:obs.doy.map((x,i)=>({x,y:obs.crop_gdd[c][i]})),borderColor:col,borderWidth:2.5,fill:false,pointRadius:1,order:1});
+        }
+    }
+    CH.gdd.data.datasets=gds; CH.gdd.update('none');
+
+    // SW KPIs
+    if(fc&&fc[swField]) {
+        const li=fc.doys.length-1;
+        const swEnd=fc[swField].mean[li];
+        const swNow = obs&&obs.soil_water&&obs.soil_water[crop]?obs.soil_water[crop].slice(-1)[0]:null;
+        document.getElementById('sw-kpis').innerHTML=
+            `<div class="kpi"><div class="l">Current Soil Water</div><div class="v">${swNow!==null?swNow.toFixed(1)+'"':'N/A'}</div><div class="s">${swNow!==null?(swNow<2?'Stress risk':'Adequate'):''}</div></div>`+
+            `<div class="kpi"><div class="l">End-Season SW (Fcst)</div><div class="v">${swEnd.toFixed(1)}"</div><div class="s">of 7.0" capacity</div></div>`+
+            `<div class="kpi"><div class="l">AWC</div><div class="v">7.0"</div><div class="s">Silt loam, 2ft root zone</div></div>`;
+    }
+}
+
+// ══════ INIT ══════
+function refresh() { refreshWB(); if(CH.tmax) refreshWx(); if(CH.sw) refreshSW(); }
+
+async function init() {
+    try {
+        const resp = await fetch('dashboard_data.json');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        D = await resp.json();
+    } catch(e) {
+        document.getElementById('loading').style.display='none';
+        document.getElementById('error-msg').style.display='block';
+        console.error('Failed to load dashboard data:', e);
+        return;
+    }
+
+    document.getElementById('loading').style.display='none';
+    document.getElementById('main-content').style.display='block';
+
+    // Header subtitle
+    const m = D.metadata;
+    document.getElementById('hdr-sub').textContent =
+        `${m.location} | ${m.forecast_source} | ${m.et0_method} | Updated ${m.generated}`;
+
+    // Footer
+    document.getElementById('ft').textContent =
+        `Data: ${m.forecast_source} (forecast), ${m.historical_source} (history) | ET0: ${m.et0_method} | ` +
+        `Precip: ${m.precip_method||'SCS eff. precip'} | Soil: ${m.soil_model||''} | Kc: ${m.phenology||'GDD-based'} | ${m.location}`;
+
+    // Populate compare dropdown
+    const sel = document.getElementById('sel-cmp');
+    sel.innerHTML = '<option value="none">None</option><option value="median30">30-yr Median</option><option value="median10">10-yr Median</option>';
+    (D.metadata.years || []).forEach(y => {
+        const o = document.createElement('option');
+        o.value = String(y); o.textContent = String(y);
+        sel.appendChild(o);
+    });
+
+    buildWB();
+    refreshWB();
+}
+
+init();
+</script>
+</body>
+</html>
